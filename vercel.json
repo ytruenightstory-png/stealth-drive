@@ -1,5 +1,9 @@
-{
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true; // Chú ý: Rule này mở toàn bộ quyền truy cập để bạn dễ test.
+    }
+  }
 }
+Sau khi hoàn thiện, chúng ta sẽ siết chặt bảo mật lại sau. Chúc bạn thành công!
