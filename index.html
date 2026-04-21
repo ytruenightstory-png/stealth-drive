@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Platform</title>
+    <title>StealthDrive Platform</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- CryptoJS for URL Encryption -->
@@ -19,6 +19,13 @@
         }
         #custom-play-btn:hover { background: rgba(220, 38, 38, 0.9); transform: translate(-50%, -50%) scale(1.1); }
         .hidden-element { display: none !important; }
+        
+        /* Loading Spinner */
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3); border-radius: 50%;
+            border-top: 4px solid #ffffff; width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col">
@@ -34,35 +41,43 @@
         // MODULE 1: FIREBASE & GLOBAL CONFIGURATION
         // -----------------------------------------------------------------
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, updateDoc, increment, serverTimestamp } 
+        import { getFirestore, doc, setDoc, updateDoc, increment, serverTimestamp, collection, getDocs, deleteDoc, getDoc } 
             from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // TODO: Replace with your actual Firebase Project Config
+        // User provided Firebase Configuration
         const firebaseConfig = {
-            apiKey: "AIzaSy_YOUR_API_KEY_HERE",
-            authDomain: "your-project.firebaseapp.com",
-            projectId: "your-project",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "1:123456789:web:abcdef"
+            apiKey: "AIzaSyCDBVvf6Q18-cdcLouUVenDOeYPtfKOZt8",
+            authDomain: "stealth-drive-ca20e.firebaseapp.com",
+            projectId: "stealth-drive-ca20e",
+            storageBucket: "stealth-drive-ca20e.firebasestorage.app",
+            messagingSenderId: "72158519364",
+            appId: "1:72158519364:web:f17473d7446225b9a99c11"
         };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
         const CONFIG = {
-            AES_SECRET: 'SuperSecretKey2026!@#', // Change this before production
-            WORKER_UPLOAD_URL: 'https://your-worker.yourdomain.workers.dev', // Cloudflare Worker URL
-            AD_URL: 'https://example-ad-network.com/promote'
+            AES_SECRET: 'SuperSecretKey2026!@#', 
+            // IMPORTANT: You MUST set up a Cloudflare Worker and put the URL below to fix "Failed to fetch" CORS errors.
+            WORKER_UPLOAD_URL: 'https://your-worker.yourdomain.workers.dev', 
+            DEFAULT_AD_URL: 'https://example-ad-network.com/promote',
+            ADMIN_PASSWORD: 'admin123' // Change this password
         };
 
-        // Helper: Generate UUID for direct upload fallback
-        function generateUUID() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
+        // Fetch Global Ad Settings from Firebase on boot
+        let currentAdUrl = CONFIG.DEFAULT_AD_URL;
+        async function loadGlobalSettings() {
+            try {
+                const snap = await getDoc(doc(db, "settings", "global"));
+                if (snap.exists() && snap.data().ad_url) {
+                    currentAdUrl = snap.data().ad_url;
+                }
+            } catch (e) {
+                console.warn("Could not load global settings from DB, using default.", e);
+            }
         }
+        loadGlobalSettings();
 
         // -----------------------------------------------------------------
         // MODULE 2: CRYPTOGRAPHY & STEALTH ENGINE
@@ -81,18 +96,8 @@
                     .replace(/e1Q2u3A/g, '=');
                 const bytes = CryptoJS.AES.decrypt(standardStr, CONFIG.AES_SECRET);
                 return bytes.toString(CryptoJS.enc.Utf8);
-            },
-            preventDevTools: () => {
-                document.addEventListener('contextmenu', e => e.preventDefault());
-                document.onkeydown = function(e) {
-                    if (e.keyCode == 123) return false; // Block F12
-                    if (e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) return false; // Block Ctrl+Shift+I
-                };
             }
         };
-
-        // Activate Anti-F12 Stealth (Uncomment in production)
-        // CryptoModule.preventDevTools();
 
         // -----------------------------------------------------------------
         // MODULE 3: ADVERTISEMENT ENGINE (MONETIZATION)
@@ -104,13 +109,13 @@
                     
                     if (!isMobile) {
                         // Desktop Strategy: Pop-under new tab
-                        window.open(CONFIG.AD_URL, '_blank');
+                        window.open(currentAdUrl, '_blank');
                         playBtnElement.classList.add('hidden-element');
                         videoElement.play();
                     } else {
                         // Mobile Strategy: History Trap (Redirect & Autoplay on Back)
                         history.pushState({ adTrap: true }, '', window.location.href);
-                        window.location.href = CONFIG.AD_URL;
+                        window.location.href = currentAdUrl;
                         
                         window.addEventListener('popstate', () => {
                             playBtnElement.classList.add('hidden-element');
@@ -150,6 +155,7 @@
                                         <input type="text" id="shareLink" readonly class="flex-grow p-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
                                         <button id="copyBtn" class="bg-blue-600 text-white px-5 rounded-md hover:bg-blue-700 font-semibold transition-colors">Copy</button>
                                     </div>
+                                    <a id="previewLink" href="#" target="_blank" class="block mt-4 text-sm text-blue-600 hover:underline font-medium">Open Player in New Tab &rarr;</a>
                                 </div>
                             </div>
                         </div>
@@ -162,6 +168,7 @@
                 const resultBox = document.getElementById('resultBox');
                 const shareLink = document.getElementById('shareLink');
                 const copyBtn = document.getElementById('copyBtn');
+                const previewLink = document.getElementById('previewLink');
 
                 uploadBtn.onclick = () => fileInput.click();
 
@@ -171,86 +178,59 @@
 
                     uploadBtn.disabled = true;
                     uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    statusTxt.innerHTML = `<span class="animate-pulse text-blue-600">Uploading...</span>`;
+                    statusTxt.innerHTML = `<span class="animate-pulse text-blue-600">Uploading to Proxy Network...</span>`;
                     resultBox.classList.add('hidden');
 
                     const formData = new FormData();
                     formData.append('file', file);
                     let data = {};
-                    let provider = 'worker_pool';
 
                     try {
-                        // 1. Try to send to Cloudflare Worker first
-                        if (CONFIG.WORKER_UPLOAD_URL && !CONFIG.WORKER_UPLOAD_URL.includes('yourdomain')) {
-                            const response = await fetch(CONFIG.WORKER_UPLOAD_URL, {
-                                method: 'POST',
-                                body: formData
-                            });
-                            data = await response.json();
-                        } else {
-                            throw new Error("Worker not configured. Falling back to direct upload.");
-                        }
-                    } catch (workerErr) {
-                        // FALLBACK: If Worker fails or isn't set up, upload directly to Videy using fake UUID
-                        console.warn(workerErr.message);
-                        statusTxt.innerHTML = `<span class="animate-pulse text-yellow-600">Worker unavailable. Using direct upload fallback...</span>`;
-                        provider = 'direct_videy';
+                        // Attempt upload via Cloudflare Worker (MANDATORY FOR BYPASSING CORS)
+                        const response = await fetch(CONFIG.WORKER_UPLOAD_URL, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        data = await response.json();
                         
-                        try {
-                            const visitorId = generateUUID();
-                            const fallbackResponse = await fetch(`https://videy.co/api/upload?visitorId=${visitorId}`, {
-                                method: 'POST',
-                                body: formData
-                            });
-                            
-                            const text = await fallbackResponse.text();
-                            try {
-                                data = JSON.parse(text);
-                            } catch (e) {
-                                data = { id: text.trim() }; // Handle plain text ID
-                            }
-                        } catch (directErr) {
-                            throw new Error("Both Worker and Direct Upload failed.");
-                        }
+                    } catch (uploadErr) {
+                        console.error("Upload Failure Details:", uploadErr);
+                        statusTxt.innerHTML = `<span class="text-red-600 font-bold">Upload Blocked (CORS Error).</span><br/>
+                        <span class="text-xs text-gray-500">You must configure the Cloudflare Worker URL in the source code to bypass CORS restrictions.</span>`;
+                        uploadBtn.disabled = false;
+                        uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        fileInput.value = '';
+                        return; // Stop execution
                     }
 
                     try {
                         if (!data.id && !data.url) throw new Error("No ID returned from CDN");
-
-                        // Resolve real ID (handle different clone CDN responses)
                         const realId = data.id || data.url.split('/').pop().split('.')[0];
                         
-                        // 2. Encrypt the ID locally
+                        // Encrypt the ID locally
                         const encryptedId = CryptoModule.encryptId(realId);
                         
-                        // 3. Save metadata to Firebase Firestore (Safely wrapped in case Firebase is not set up)
-                        try {
-                            if (firebaseConfig.apiKey !== "AIzaSy_YOUR_API_KEY_HERE") {
-                                await setDoc(doc(db, "videos", encryptedId), {
-                                    real_cdn_id: realId,
-                                    cdn_provider: provider,
-                                    views: 0,
-                                    created_at: serverTimestamp()
-                                });
-                            } else {
-                                console.warn("Firebase not configured. Skipping Database save. (Link will still work)");
-                            }
-                        } catch (dbErr) {
-                            console.error("Firebase save warning:", dbErr);
-                        }
+                        // Save metadata to Firebase Firestore
+                        await setDoc(doc(db, "videos", encryptedId), {
+                            real_cdn_id: realId,
+                            cdn_provider: 'worker_pool',
+                            views: 0,
+                            created_at: serverTimestamp()
+                        });
 
-                        // 4. Generate Link
+                        // Generate Link
                         let currentDomain = window.location.origin;
                         if (currentDomain === 'file://' || currentDomain === 'null') currentDomain = 'http://localhost';
                         const link = `${currentDomain}/v/${encryptedId}`;
                         
                         shareLink.value = link;
+                        previewLink.href = link;
                         statusTxt.innerHTML = `<span class="text-green-600 font-bold">Upload Complete!</span>`;
                         resultBox.classList.remove('hidden');
 
                     } catch (err) {
-                        statusTxt.innerHTML = `<span class="text-red-600 font-bold">Upload Failed. Check console.</span>`;
-                        console.error("Upload Error:", err);
+                        statusTxt.innerHTML = `<span class="text-red-600 font-bold">Database Save Failed. Check console.</span>`;
+                        console.error("Database Error:", err);
                     } finally {
                         uploadBtn.disabled = false;
                         uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -280,16 +260,15 @@
                     <div class="flex-grow flex items-center justify-center bg-black w-full min-h-screen relative overflow-hidden">
                         <video id="mainVideo" class="w-full h-full max-h-screen object-contain" controls preload="auto"></video>
                         
-                        <!-- Custom Play Button for Ad Trigger -->
-                        <div id="custom-play-btn">
+                        <div id="custom-play-btn" class="hidden-element">
                             <svg width="40" height="40" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/>
                             </svg>
                         </div>
 
-                        <!-- Loading Indicator -->
-                        <div id="loadingIndicator" class="absolute top-4 left-4 text-white text-xs font-mono bg-black/50 px-2 py-1 rounded">
-                            Buffering stream...
+                        <div id="loadingIndicator" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+                            <div class="spinner"></div>
+                            <span class="text-white text-sm mt-3 font-mono">Connecting to CDN...</span>
                         </div>
                     </div>
                 `;
@@ -299,68 +278,201 @@
                 const loading = document.getElementById('loadingIndicator');
                 
                 try {
-                    // 1. Increment Ghost View Counter in Firebase (Safely)
-                    try {
-                        if (firebaseConfig.apiKey !== "AIzaSy_YOUR_API_KEY_HERE") {
-                            const docRef = doc(db, "videos", encryptedId);
-                            await updateDoc(docRef, { views: increment(1) });
-                        }
-                    } catch (e) {
-                        console.warn("View tracking failed/ignored due to Firebase config.");
-                    }
+                    // Track View
+                    const docRef = doc(db, "videos", encryptedId);
+                    await updateDoc(docRef, { views: increment(1) }).catch(e => console.warn("View tracking failed/ignored"));
 
-                    // 2. Decrypt URL
+                    // Decrypt URL
                     const realId = CryptoModule.decryptId(encryptedId);
-                    
-                    // 3. Fetch as Blob to hide network source in DOM (Anti-Scraping)
                     const cdnUrl = `https://cdn.videy.co/${realId}.mp4`; 
                     
+                    // Fetch as Blob to hide network source in DOM
                     fetch(cdnUrl)
-                        .then(res => res.blob())
+                        .then(res => {
+                            if (!res.ok) throw new Error("Network response was not ok");
+                            return res.blob();
+                        })
                         .then(blob => {
                             const blobUrl = URL.createObjectURL(blob);
                             video.src = blobUrl;
                             loading.classList.add('hidden-element');
+                            playBtn.classList.remove('hidden-element');
                         })
                         .catch(err => {
-                            loading.innerText = "Direct stream loaded.";
-                            console.error("Blob Fetch Error", err);
-                            // Fallback to direct src if blob fails (due to strict CDN CORS)
+                            console.error("Blob Fetch Error, falling back to direct stream", err);
                             video.src = cdnUrl;
+                            loading.classList.add('hidden-element');
+                            playBtn.classList.remove('hidden-element');
                         });
 
-                    // 4. Attach Ad Monetization
                     AdEngine.attachToPlayButton(playBtn, video);
 
-                    // Re-show play button if video is paused manually
                     video.onpause = () => playBtn.classList.remove('hidden-element');
                     video.onplay = () => playBtn.classList.add('hidden-element');
 
                 } catch (error) {
                     console.error("Player Initialization Failed", error);
-                    container.innerHTML = `<div class="text-white bg-black h-screen flex items-center justify-center font-bold">VIDEO NOT FOUND OR CORRUPTED</div>`;
+                    container.innerHTML = `<div class="text-white bg-black h-screen flex items-center justify-center font-bold text-xl">VIDEO NOT FOUND OR CORRUPTED</div>`;
                 }
             }
         };
 
         // -----------------------------------------------------------------
-        // MODULE 6: SPA ROUTER
+        // MODULE 6: ADMIN DASHBOARD
+        // -----------------------------------------------------------------
+        const AdminModule = {
+            renderLogin: (container) => {
+                container.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center bg-gray-100">
+                        <div class="bg-white p-8 rounded-lg shadow-md w-96 text-center">
+                            <h2 class="text-2xl font-bold mb-6">Admin Access</h2>
+                            <input type="password" id="adminPass" placeholder="Enter Admin Password" class="w-full p-3 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-gray-800">
+                            <button id="loginBtn" class="w-full bg-gray-900 text-white py-3 rounded font-bold hover:bg-gray-800">Enter Dashboard</button>
+                            <p id="loginError" class="text-red-500 text-sm mt-3 hidden-element">Incorrect Password</p>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('loginBtn').onclick = () => {
+                    const pass = document.getElementById('adminPass').value;
+                    if (pass === CONFIG.ADMIN_PASSWORD) {
+                        sessionStorage.setItem('stealth_admin_auth', 'true');
+                        AdminModule.renderDashboard(container);
+                    } else {
+                        document.getElementById('loginError').classList.remove('hidden-element');
+                    }
+                };
+            },
+
+            renderDashboard: async (container) => {
+                container.innerHTML = `
+                    <div class="min-h-screen bg-gray-100 p-8">
+                        <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+                            <div class="bg-gray-900 text-white p-6 flex justify-between items-center">
+                                <h1 class="text-2xl font-bold">Platform Management</h1>
+                                <button id="logoutBtn" class="text-sm bg-gray-700 px-4 py-2 rounded hover:bg-gray-600">Logout</button>
+                            </div>
+                            
+                            <div class="p-6">
+                                <!-- Global Settings Section -->
+                                <div class="mb-8 p-6 bg-blue-50 rounded-lg border border-blue-100">
+                                    <h2 class="text-xl font-bold mb-4">Advertisement Configuration</h2>
+                                    <div class="flex gap-4">
+                                        <input type="text" id="adUrlInput" value="${currentAdUrl}" class="flex-grow p-3 border rounded focus:ring-2 focus:ring-blue-500" placeholder="Enter Target Ad URL">
+                                        <button id="saveAdBtn" class="bg-blue-600 text-white px-6 py-3 rounded font-bold hover:bg-blue-700">Update Link</button>
+                                    </div>
+                                    <p id="adSaveStatus" class="text-sm text-green-600 mt-2 hidden-element">Successfully updated ad link!</p>
+                                </div>
+
+                                <!-- Video Database Section -->
+                                <h2 class="text-xl font-bold mb-4">Video Database</h2>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr class="bg-gray-100">
+                                                <th class="p-4 border-b font-semibold">Encrypted ID</th>
+                                                <th class="p-4 border-b font-semibold">CDN ID</th>
+                                                <th class="p-4 border-b font-semibold">Views</th>
+                                                <th class="p-4 border-b font-semibold">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="videoTableBody">
+                                            <tr><td colspan="4" class="p-4 text-center text-gray-500">Loading database...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Handle Logout
+                document.getElementById('logoutBtn').onclick = () => {
+                    sessionStorage.removeItem('stealth_admin_auth');
+                    window.location.reload();
+                };
+
+                // Handle Ad Settings Save
+                document.getElementById('saveAdBtn').onclick = async () => {
+                    const newUrl = document.getElementById('adUrlInput').value;
+                    try {
+                        await setDoc(doc(db, "settings", "global"), { ad_url: newUrl }, { merge: true });
+                        currentAdUrl = newUrl;
+                        const status = document.getElementById('adSaveStatus');
+                        status.classList.remove('hidden-element');
+                        setTimeout(() => status.classList.add('hidden-element'), 3000);
+                    } catch (e) {
+                        alert("Error saving settings. Check Firebase rules.");
+                        console.error(e);
+                    }
+                };
+
+                // Load Videos from Firestore
+                const tbody = document.getElementById('videoTableBody');
+                try {
+                    const snapshot = await getDocs(collection(db, "videos"));
+                    let html = '';
+                    if (snapshot.empty) {
+                        html = `<tr><td colspan="4" class="p-4 text-center text-gray-500">No videos found.</td></tr>`;
+                    } else {
+                        snapshot.forEach(docSnap => {
+                            const data = docSnap.data();
+                            const docId = docSnap.id;
+                            html += `
+                                <tr class="hover:bg-gray-50" id="row-${docId}">
+                                    <td class="p-4 border-b font-mono text-xs truncate max-w-[150px]" title="${docId}">${docId}</td>
+                                    <td class="p-4 border-b font-mono text-xs text-gray-500">${data.real_cdn_id}</td>
+                                    <td class="p-4 border-b font-bold text-blue-600">${data.views || 0}</td>
+                                    <td class="p-4 border-b">
+                                        <a href="/v/${docId}" target="_blank" class="text-blue-500 hover:underline mr-3 text-sm">View</a>
+                                        <button onclick="window.deleteVideo('${docId}')" class="text-red-500 hover:underline text-sm font-semibold">Delete</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    tbody.innerHTML = html;
+                } catch (e) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error loading database. Make sure Firebase Rules allow read access.</td></tr>`;
+                    console.error("Admin DB Fetch Error:", e);
+                }
+
+                // Global function for inline delete button
+                window.deleteVideo = async (docId) => {
+                    if(confirm("Are you sure you want to delete this record from the database? (This does not delete it from the CDN)")) {
+                        try {
+                            await deleteDoc(doc(db, "videos", docId));
+                            document.getElementById(`row-${docId}`).remove();
+                        } catch (e) {
+                            alert("Failed to delete. Check Firebase rules.");
+                            console.error(e);
+                        }
+                    }
+                };
+            }
+        };
+
+        // -----------------------------------------------------------------
+        // MODULE 7: SPA ROUTER
         // -----------------------------------------------------------------
         function routeApp() {
             const path = window.location.pathname;
             const searchParams = new URLSearchParams(window.location.search);
             const appContainer = document.getElementById('app-container');
-            appContainer.innerHTML = ''; // Clear DOM
+            appContainer.innerHTML = ''; 
 
-            // Handle both /v/ID and /?v=ID router logic
-            let encryptedId = null;
-            if (path.startsWith('/v/')) {
-                encryptedId = path.split('/v/')[1].replace('/', '');
+            if (path.startsWith('/admin') || searchParams.has('admin')) {
+                document.title = "Admin Dashboard";
+                if (sessionStorage.getItem('stealth_admin_auth') === 'true') {
+                    AdminModule.renderDashboard(appContainer);
+                } else {
+                    AdminModule.renderLogin(appContainer);
+                }
+            } else if (path.startsWith('/v/')) {
+                const encryptedId = path.split('/v/')[1].replace('/', '');
+                document.title = "Watching Video - StealthDrive";
+                PlayerModule.render(appContainer, encryptedId);
             } else if (searchParams.has('v')) {
-                encryptedId = searchParams.get('v');
-            }
-
-            if (encryptedId) {
+                const encryptedId = searchParams.get('v');
                 document.title = "Watching Video - StealthDrive";
                 PlayerModule.render(appContainer, encryptedId);
             } else {
@@ -369,7 +481,6 @@
             }
         }
 
-        // Initialize Router
         window.addEventListener('popstate', routeApp);
         document.addEventListener('DOMContentLoaded', routeApp);
 
