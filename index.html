@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Platform</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- CryptoJS for URL Encryption -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <style>
+        /* Custom Player Overlay CSS */
+        #custom-play-btn {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7); color: white; border-radius: 50%; width: 80px; height: 80px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 50;
+            transition: all 0.2s ease-in-out;
+        }
+        #custom-play-btn:hover { background: rgba(220, 38, 38, 0.9); transform: translate(-50%, -50%) scale(1.1); }
+        .hidden-element { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col">
+
+    <!-- SPA Container -->
+    <div id="app-container" class="flex-grow flex flex-col w-full"></div>
+
+    <!-- =================================================================== -->
+    <!-- MODULAR JAVASCRIPT SYSTEM                                           -->
+    <!-- =================================================================== -->
+    <script type="module">
+        // -----------------------------------------------------------------
+        // MODULE 1: FIREBASE & GLOBAL CONFIGURATION
+        // -----------------------------------------------------------------
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, updateDoc, increment, serverTimestamp } 
+            from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // TODO: Replace with your actual Firebase Project Config
+        const firebaseConfig = {
+            apiKey: "AIzaSy_YOUR_API_KEY_HERE",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const CONFIG = {
+            AES_SECRET: 'SuperSecretKey2026!@#', // Change this before production
+            WORKER_UPLOAD_URL: 'https://your-worker.yourdomain.workers.dev', // Cloudflare Worker URL
+            AD_URL: 'https://example-ad-network.com/promote'
+        };
+
+        // Helper: Generate UUID for direct upload fallback
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // -----------------------------------------------------------------
+        // MODULE 2: CRYPTOGRAPHY & STEALTH ENGINE
+        // -----------------------------------------------------------------
+        const CryptoModule = {
+            encryptId: (realId) => {
+                return CryptoJS.AES.encrypt(realId, CONFIG.AES_SECRET).toString()
+                    .replace(/\+/g, 'p1L2u3S')
+                    .replace(/\//g, 's1L2a3S')
+                    .replace(/=/g, 'e1Q2u3A');
+            },
+            decryptId: (encryptedStr) => {
+                const standardStr = encryptedStr
+                    .replace(/p1L2u3S/g, '+')
+                    .replace(/s1L2a3S/g, '/')
+                    .replace(/e1Q2u3A/g, '=');
+                const bytes = CryptoJS.AES.decrypt(standardStr, CONFIG.AES_SECRET);
+                return bytes.toString(CryptoJS.enc.Utf8);
+            },
+            preventDevTools: () => {
+                document.addEventListener('contextmenu', e => e.preventDefault());
+                document.onkeydown = function(e) {
+                    if (e.keyCode == 123) return false; // Block F12
+                    if (e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) return false; // Block Ctrl+Shift+I
+                };
+            }
+        };
+
+        // Activate Anti-F12 Stealth (Uncomment in production)
+        // CryptoModule.preventDevTools();
+
+        // -----------------------------------------------------------------
+        // MODULE 3: ADVERTISEMENT ENGINE (MONETIZATION)
+        // -----------------------------------------------------------------
+        const AdEngine = {
+            attachToPlayButton: (playBtnElement, videoElement) => {
+                playBtnElement.addEventListener('click', () => {
+                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                    
+                    if (!isMobile) {
+                        // Desktop Strategy: Pop-under new tab
+                        window.open(CONFIG.AD_URL, '_blank');
+                        playBtnElement.classList.add('hidden-element');
+                        videoElement.play();
+                    } else {
+                        // Mobile Strategy: History Trap (Redirect & Autoplay on Back)
+                        history.pushState({ adTrap: true }, '', window.location.href);
+                        window.location.href = CONFIG.AD_URL;
+                        
+                        window.addEventListener('popstate', () => {
+                            playBtnElement.classList.add('hidden-element');
+                            videoElement.play();
+                        }, { once: true });
+                    }
+                });
+            }
+        };
+
+        // -----------------------------------------------------------------
+        // MODULE 4: UPLOADER VIEW (HOME)
+        // -----------------------------------------------------------------
+        const UploaderModule = {
+            render: (container) => {
+                container.innerHTML = `
+                    <header class="pt-4 pb-4 border-b border-gray-200 bg-white shadow-sm">
+                        <div class="max-w-6xl mx-auto px-6 flex justify-between items-center">
+                            <span class="font-bold text-2xl tracking-tight text-gray-900">StealthDrive</span>
+                        </div>
+                    </header>
+                    <div class="flex-grow flex items-center justify-center p-6">
+                        <div class="max-w-xl w-full text-center space-y-6">
+                            <h1 class="text-4xl font-extrabold tracking-tight">Upload Securely</h1>
+                            <p class="text-gray-500">Encrypted, anonymous, and lightning fast.</p>
+                            
+                            <div class="p-8 bg-white shadow-2xl rounded-2xl border border-gray-100 mt-8">
+                                <input type="file" id="fileInput" class="hidden" accept="video/mp4,video/quicktime" />
+                                <button id="uploadBtn" class="bg-gray-900 text-white px-10 py-4 rounded-full font-bold text-lg hover:bg-gray-800 transition-all hover:scale-105 active:scale-95 shadow-lg">
+                                    Select Video to Upload
+                                </button>
+                                <p id="statusTxt" class="mt-6 text-sm font-medium text-gray-500"></p>
+                                
+                                <div id="resultBox" class="hidden mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    <p class="text-xs text-gray-400 mb-2 text-left font-semibold uppercase">Your Encrypted Link</p>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="shareLink" readonly class="flex-grow p-3 border rounded-md bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                        <button id="copyBtn" class="bg-blue-600 text-white px-5 rounded-md hover:bg-blue-700 font-semibold transition-colors">Copy</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                const fileInput = document.getElementById('fileInput');
+                const uploadBtn = document.getElementById('uploadBtn');
+                const statusTxt = document.getElementById('statusTxt');
+                const resultBox = document.getElementById('resultBox');
+                const shareLink = document.getElementById('shareLink');
+                const copyBtn = document.getElementById('copyBtn');
+
+                uploadBtn.onclick = () => fileInput.click();
+
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    uploadBtn.disabled = true;
+                    uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    statusTxt.innerHTML = `<span class="animate-pulse text-blue-600">Uploading...</span>`;
+                    resultBox.classList.add('hidden');
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    let data = {};
+                    let provider = 'worker_pool';
+
+                    try {
+                        // 1. Try to send to Cloudflare Worker first
+                        if (CONFIG.WORKER_UPLOAD_URL && !CONFIG.WORKER_UPLOAD_URL.includes('yourdomain')) {
+                            const response = await fetch(CONFIG.WORKER_UPLOAD_URL, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            data = await response.json();
+                        } else {
+                            throw new Error("Worker not configured. Falling back to direct upload.");
+                        }
+                    } catch (workerErr) {
+                        // FALLBACK: If Worker fails or isn't set up, upload directly to Videy using fake UUID
+                        console.warn(workerErr.message);
+                        statusTxt.innerHTML = `<span class="animate-pulse text-yellow-600">Worker unavailable. Using direct upload fallback...</span>`;
+                        provider = 'direct_videy';
+                        
+                        try {
+                            const visitorId = generateUUID();
+                            const fallbackResponse = await fetch(`https://videy.co/api/upload?visitorId=${visitorId}`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const text = await fallbackResponse.text();
+                            try {
+                                data = JSON.parse(text);
+                            } catch (e) {
+                                data = { id: text.trim() }; // Handle plain text ID
+                            }
+                        } catch (directErr) {
+                            throw new Error("Both Worker and Direct Upload failed.");
+                        }
+                    }
+
+                    try {
+                        if (!data.id && !data.url) throw new Error("No ID returned from CDN");
+
+                        // Resolve real ID (handle different clone CDN responses)
+                        const realId = data.id || data.url.split('/').pop().split('.')[0];
+                        
+                        // 2. Encrypt the ID locally
+                        const encryptedId = CryptoModule.encryptId(realId);
+                        
+                        // 3. Save metadata to Firebase Firestore (Safely wrapped in case Firebase is not set up)
+                        try {
+                            if (firebaseConfig.apiKey !== "AIzaSy_YOUR_API_KEY_HERE") {
+                                await setDoc(doc(db, "videos", encryptedId), {
+                                    real_cdn_id: realId,
+                                    cdn_provider: provider,
+                                    views: 0,
+                                    created_at: serverTimestamp()
+                                });
+                            } else {
+                                console.warn("Firebase not configured. Skipping Database save. (Link will still work)");
+                            }
+                        } catch (dbErr) {
+                            console.error("Firebase save warning:", dbErr);
+                        }
+
+                        // 4. Generate Link
+                        let currentDomain = window.location.origin;
+                        if (currentDomain === 'file://' || currentDomain === 'null') currentDomain = 'http://localhost';
+                        const link = `${currentDomain}/v/${encryptedId}`;
+                        
+                        shareLink.value = link;
+                        statusTxt.innerHTML = `<span class="text-green-600 font-bold">Upload Complete!</span>`;
+                        resultBox.classList.remove('hidden');
+
+                    } catch (err) {
+                        statusTxt.innerHTML = `<span class="text-red-600 font-bold">Upload Failed. Check console.</span>`;
+                        console.error("Upload Error:", err);
+                    } finally {
+                        uploadBtn.disabled = false;
+                        uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        fileInput.value = '';
+                    }
+                };
+
+                copyBtn.onclick = () => {
+                    shareLink.select();
+                    document.execCommand('copy');
+                    copyBtn.innerText = 'Copied!';
+                    copyBtn.classList.replace('bg-blue-600', 'bg-green-600');
+                    setTimeout(() => {
+                        copyBtn.innerText = 'Copy';
+                        copyBtn.classList.replace('bg-green-600', 'bg-blue-600');
+                    }, 2000);
+                };
+            }
+        };
+
+        // -----------------------------------------------------------------
+        // MODULE 5: PLAYER VIEW (Standalone Watch Page)
+        // -----------------------------------------------------------------
+        const PlayerModule = {
+            render: async (container, encryptedId) => {
+                container.innerHTML = `
+                    <div class="flex-grow flex items-center justify-center bg-black w-full min-h-screen relative overflow-hidden">
+                        <video id="mainVideo" class="w-full h-full max-h-screen object-contain" controls preload="auto"></video>
+                        
+                        <!-- Custom Play Button for Ad Trigger -->
+                        <div id="custom-play-btn">
+                            <svg width="40" height="40" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M10.804 8 5 4.633v6.734L10.804 8zm.792-.696a.802.802 0 0 1 0 1.392l-6.363 3.692C4.713 12.69 4 12.345 4 11.692V4.308c0-.653.713-.998 1.233-.696l6.363 3.692z"/>
+                            </svg>
+                        </div>
+
+                        <!-- Loading Indicator -->
+                        <div id="loadingIndicator" class="absolute top-4 left-4 text-white text-xs font-mono bg-black/50 px-2 py-1 rounded">
+                            Buffering stream...
+                        </div>
+                    </div>
+                `;
+
+                const video = document.getElementById('mainVideo');
+                const playBtn = document.getElementById('custom-play-btn');
+                const loading = document.getElementById('loadingIndicator');
+                
+                try {
+                    // 1. Increment Ghost View Counter in Firebase (Safely)
+                    try {
+                        if (firebaseConfig.apiKey !== "AIzaSy_YOUR_API_KEY_HERE") {
+                            const docRef = doc(db, "videos", encryptedId);
+                            await updateDoc(docRef, { views: increment(1) });
+                        }
+                    } catch (e) {
+                        console.warn("View tracking failed/ignored due to Firebase config.");
+                    }
+
+                    // 2. Decrypt URL
+                    const realId = CryptoModule.decryptId(encryptedId);
+                    
+                    // 3. Fetch as Blob to hide network source in DOM (Anti-Scraping)
+                    const cdnUrl = `https://cdn.videy.co/${realId}.mp4`; 
+                    
+                    fetch(cdnUrl)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const blobUrl = URL.createObjectURL(blob);
+                            video.src = blobUrl;
+                            loading.classList.add('hidden-element');
+                        })
+                        .catch(err => {
+                            loading.innerText = "Direct stream loaded.";
+                            console.error("Blob Fetch Error", err);
+                            // Fallback to direct src if blob fails (due to strict CDN CORS)
+                            video.src = cdnUrl;
+                        });
+
+                    // 4. Attach Ad Monetization
+                    AdEngine.attachToPlayButton(playBtn, video);
+
+                    // Re-show play button if video is paused manually
+                    video.onpause = () => playBtn.classList.remove('hidden-element');
+                    video.onplay = () => playBtn.classList.add('hidden-element');
+
+                } catch (error) {
+                    console.error("Player Initialization Failed", error);
+                    container.innerHTML = `<div class="text-white bg-black h-screen flex items-center justify-center font-bold">VIDEO NOT FOUND OR CORRUPTED</div>`;
+                }
+            }
+        };
+
+        // -----------------------------------------------------------------
+        // MODULE 6: SPA ROUTER
+        // -----------------------------------------------------------------
+        function routeApp() {
+            const path = window.location.pathname;
+            const searchParams = new URLSearchParams(window.location.search);
+            const appContainer = document.getElementById('app-container');
+            appContainer.innerHTML = ''; // Clear DOM
+
+            // Handle both /v/ID and /?v=ID router logic
+            let encryptedId = null;
+            if (path.startsWith('/v/')) {
+                encryptedId = path.split('/v/')[1].replace('/', '');
+            } else if (searchParams.has('v')) {
+                encryptedId = searchParams.get('v');
+            }
+
+            if (encryptedId) {
+                document.title = "Watching Video - StealthDrive";
+                PlayerModule.render(appContainer, encryptedId);
+            } else {
+                document.title = "Upload - StealthDrive";
+                UploaderModule.render(appContainer);
+            }
+        }
+
+        // Initialize Router
+        window.addEventListener('popstate', routeApp);
+        document.addEventListener('DOMContentLoaded', routeApp);
+
+    </script>
+</body>
+</html>
