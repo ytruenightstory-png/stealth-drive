@@ -62,8 +62,16 @@
             // IMPORTANT: You MUST set up a Cloudflare Worker and put the URL below to fix "Failed to fetch" CORS errors.
             WORKER_UPLOAD_URL: 'https://your-worker.yourdomain.workers.dev', 
             DEFAULT_AD_URL: 'https://example-ad-network.com/promote',
-            ADMIN_PASSWORD: 'admin123' // Change this password
+            ADMIN_PASSWORD: 'xY7$pL9@kQ2!' // Updated to a random 12-char password with special chars
         };
+
+        // Helper: Generate UUID for direct upload fallback
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
 
         // Fetch Global Ad Settings from Firebase on boot
         let currentAdUrl = CONFIG.DEFAULT_AD_URL;
@@ -184,23 +192,47 @@
                     const formData = new FormData();
                     formData.append('file', file);
                     let data = {};
+                    let provider = 'worker_pool';
 
                     try {
-                        // Attempt upload via Cloudflare Worker (MANDATORY FOR BYPASSING CORS)
-                        const response = await fetch(CONFIG.WORKER_UPLOAD_URL, {
-                            method: 'POST',
-                            body: formData
-                        });
-                        data = await response.json();
+                        // 1. Try Cloudflare Worker first
+                        if (CONFIG.WORKER_UPLOAD_URL && !CONFIG.WORKER_UPLOAD_URL.includes('yourdomain')) {
+                            const response = await fetch(CONFIG.WORKER_UPLOAD_URL, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            data = await response.json();
+                        } else {
+                            throw new Error("Worker not configured.");
+                        }
+                    } catch (workerErr) {
+                        // 2. FALLBACK: Direct upload to Videy if Worker fails or is not configured
+                        console.warn("Worker unavailable, falling back to direct upload:", workerErr.message);
+                        statusTxt.innerHTML = `<span class="animate-pulse text-yellow-600">Using direct upload fallback...</span>`;
+                        provider = 'direct_videy';
                         
-                    } catch (uploadErr) {
-                        console.error("Upload Failure Details:", uploadErr);
-                        statusTxt.innerHTML = `<span class="text-red-600 font-bold">Upload Blocked (CORS Error).</span><br/>
-                        <span class="text-xs text-gray-500">You must configure the Cloudflare Worker URL in the source code to bypass CORS restrictions.</span>`;
-                        uploadBtn.disabled = false;
-                        uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        fileInput.value = '';
-                        return; // Stop execution
+                        try {
+                            const visitorId = generateUUID();
+                            const fallbackResponse = await fetch(`https://videy.co/api/upload?visitorId=${visitorId}`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const text = await fallbackResponse.text();
+                            try {
+                                data = JSON.parse(text);
+                            } catch (e) {
+                                data = { id: text.trim() }; // Handle plain text ID
+                            }
+                        } catch (directErr) {
+                            console.error("Direct Upload Failure:", directErr);
+                            statusTxt.innerHTML = `<span class="text-red-600 font-bold">Upload Blocked (CORS Error).</span><br/>
+                            <span class="text-xs text-gray-500">Please configure the Cloudflare Worker URL.</span>`;
+                            uploadBtn.disabled = false;
+                            uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            fileInput.value = '';
+                            return; // Stop execution
+                        }
                     }
 
                     try {
@@ -213,7 +245,7 @@
                         // Save metadata to Firebase Firestore
                         await setDoc(doc(db, "videos", encryptedId), {
                             real_cdn_id: realId,
-                            cdn_provider: 'worker_pool',
+                            cdn_provider: provider,
                             views: 0,
                             created_at: serverTimestamp()
                         });
