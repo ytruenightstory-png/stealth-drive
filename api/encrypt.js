@@ -6,6 +6,7 @@ export default function handler(req, res) {
     const { realId } = req.body;
     if (!realId) return res.status(400).json({ error: 'Missing realId' });
 
+    // The secret is stored safely in Vercel Environment Variables
     const secret = process.env.AES_SECRET || "SuperSecretKey2026!@#";
     
     const encrypted = CryptoJS.AES.encrypt(realId, secret).toString()
