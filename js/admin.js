@@ -1,6 +1,5 @@
 import { db } from './firebase.js';
 import { doc, setDoc, collection, getDocs, deleteDoc } from "[https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js](https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js)";
-import { CONFIG } from './config.js';
 import { AdEngine } from './ad-engine.js';
 
 export const AdminModule = {
@@ -25,7 +24,6 @@ export const AdminModule = {
             errorTxt.classList.add('hidden-element');
 
             try {
-                // Call Vercel API securely
                 const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -148,3 +146,4 @@ export const AdminModule = {
         };
     }
 };
+
