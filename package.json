@@ -1,15 +1,7 @@
-
-export default function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-    
-    const { password } = req.body;
-    // Reads securely from Vercel Dashboard, fallback for local testing
-    const truePassword = process.env.ADMIN_PASSWORD || "xY7$pL9@kQ2!"; 
-    
-    if (password === truePassword) {
-        // Return a secure session token
-        res.status(200).json({ success: true, token: "stealth_auth_valid_token_999" });
-    } else {
-        res.status(401).json({ success: false, error: "Unauthorized" });
-    }
+{
+  "name": "stealth-drive",
+  "version": "2.0.0",
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  }
 }
